@@ -4,3 +4,4 @@ vnstock
 streamlit
 numpy
 pandas
+beautifulsoup4
