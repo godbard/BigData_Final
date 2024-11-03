@@ -8,3 +8,4 @@ beautifulsoup4
 IPython
 gdown
 keras
+tensorflow
