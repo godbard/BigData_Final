@@ -11,52 +11,42 @@ import importlib.util
 import sys
 import gdown
 import zipfile
-import pickle
-
-
+from tensorflow.keras.models import load_model  # Import thêm load_model từ tensorflow.keras
 
 # Stock symbols
 stock_symbols = ["VCB", "VNM", "MWG", "VIC", "SSI", "DGC", "CTD", "FPT", "MSN",
                  "GVR", "GAS", "POW", "HPG", "REE", "DHG", "GMD", "VHC", "KBC",
                  "CMG", "VRE"]
 
-
 # Directory to store the models
 storage_dir = "Model_Storage"
 os.makedirs(storage_dir, exist_ok=True)
-
 
 # Function to download files
 def download_file(file_id, output_path):
     url = f'https://drive.google.com/uc?id={file_id}'
     gdown.download(url, output_path, quiet=False)
 
-
 # Function to unzip files
 def unzip_file(zip_path, extract_to):
     with zipfile.ZipFile(zip_path, 'r') as zip_ref:
         zip_ref.extractall(extract_to)
-
 
 # Function to load models from directory
 def load_model_data(model_type):
     model_dir = os.path.join(storage_dir, model_type)
     model_dict = {}
 
-
     for file_name in os.listdir(model_dir):
-        if file_name.endswith(".pkl"):
-            stock_symbol = file_name.split("_")[-1].replace(".pkl", "")
+        if file_name.endswith(".h5"):  # Kiểm tra định dạng .h5 thay vì .pkl
+            stock_symbol = file_name.split("_")[-1].replace(".h5", "")
             file_path = os.path.join(model_dir, file_name)
-            with open(file_path, 'rb') as file:
-                model_dict[stock_symbol] = pickle.load(file)
+            model_dict[stock_symbol] = load_model(file_path)  # Sử dụng load_model để tải mô hình Keras
     return model_dict
-
 
 # Download, unzip, and load models
 def setup_models():
     def download_and_unzip(file_id, zip_path, extract_to):
-        # Download the file if directory doesn't exist
         if not os.path.exists(extract_to):
             try:
                 download_file(file_id, zip_path)
@@ -66,7 +56,6 @@ def setup_models():
                 return False
         return True
 
-
     # LSTM models
     lstm_file_id = '10O8z6Y8B2sHvv5AA0aRzeVJm1aQU0VBG'
     lstm_zip_path = os.path.join(storage_dir, 'LSTM_models.zip')
@@ -74,7 +63,6 @@ def setup_models():
         lstm_models = load_model_data("LSTM")
     else:
         lstm_models = {}
-
 
     # GRU models
     gru_file_id = '11u02kLudVUF1KBqXzs7MoH4gjNNxilSe'
@@ -84,7 +72,6 @@ def setup_models():
     else:
         gru_models = {}
 
-
     # CNN models
     cnn_file_id = '11rJoOtu97g0gqzUalM-DSC-ChG-agAf6'
     cnn_zip_path = os.path.join(storage_dir, 'CNN_models.zip')
@@ -93,14 +80,11 @@ def setup_models():
     else:
         cnn_models = {}
 
-
     return lstm_models, gru_models, cnn_models
-
-
-
 
 # Load all models
 lstm_models, gru_models, cnn_models = setup_models()
+
 
 
 # Display the technical indicators and predictions for a stock symbol
