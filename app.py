@@ -11,6 +11,8 @@ import importlib.util
 import sys
 import gdown
 import zipfile
+from tensorflow.keras.models import load_model  # Import load_model từ tensorflow.keras
+import pickle
 
 # Stock symbols
 stock_symbols = ["VCB", "VNM", "MWG", "VIC", "SSI", "DGC", "CTD", "FPT", "MSN",
@@ -31,16 +33,30 @@ def unzip_file(zip_path, extract_to):
     with zipfile.ZipFile(zip_path, 'r') as zip_ref:
         zip_ref.extractall(extract_to)
 
-# Function to load models using joblib
+# Function to load models from directory (supporting both .pkl and .h5 formats)
 def load_model_data(model_type):
     model_dir = os.path.join(storage_dir, model_type)
     model_dict = {}
 
     for file_name in os.listdir(model_dir):
-        if file_name.endswith(".joblib"):  # Đổi phần mở rộng sang .joblib
-            stock_symbol = file_name.split("_")[-1].replace(".joblib", "")
-            file_path = os.path.join(model_dir, file_name)
-            model_dict[stock_symbol] = joblib.load(file_path)  # Dùng joblib để tải mô hình
+        stock_symbol = file_name.split("_")[-1].split(".")[0]  # Extract stock symbol
+        file_path = os.path.join(model_dir, file_name)
+        
+        # Try loading as pickle (.pkl)
+        if file_name.endswith(".pkl"):
+            try:
+                with open(file_path, 'rb') as file:
+                    model_dict[stock_symbol] = pickle.load(file)
+            except Exception as e:
+                st.warning(f"Failed to load pickle model for {stock_symbol}: {e}")
+        
+        # Try loading as a Keras model (.h5)
+        elif file_name.endswith(".h5"):
+            try:
+                model_dict[stock_symbol] = load_model(file_path)
+            except Exception as e:
+                st.warning(f"Failed to load Keras model for {stock_symbol}: {e}")
+                
     return model_dict
 
 # Download, unzip, and load models
