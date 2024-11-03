@@ -11,7 +11,6 @@ import importlib.util
 import sys
 import gdown
 import zipfile
-from tensorflow.keras.models import load_model  # Import thêm load_model từ tensorflow.keras
 
 # Stock symbols
 stock_symbols = ["VCB", "VNM", "MWG", "VIC", "SSI", "DGC", "CTD", "FPT", "MSN",
@@ -32,16 +31,16 @@ def unzip_file(zip_path, extract_to):
     with zipfile.ZipFile(zip_path, 'r') as zip_ref:
         zip_ref.extractall(extract_to)
 
-# Function to load models from directory
+# Function to load models using joblib
 def load_model_data(model_type):
     model_dir = os.path.join(storage_dir, model_type)
     model_dict = {}
 
     for file_name in os.listdir(model_dir):
-        if file_name.endswith(".h5"):  # Kiểm tra định dạng .h5 thay vì .pkl
-            stock_symbol = file_name.split("_")[-1].replace(".h5", "")
+        if file_name.endswith(".joblib"):  # Đổi phần mở rộng sang .joblib
+            stock_symbol = file_name.split("_")[-1].replace(".joblib", "")
             file_path = os.path.join(model_dir, file_name)
-            model_dict[stock_symbol] = load_model(file_path)  # Sử dụng load_model để tải mô hình Keras
+            model_dict[stock_symbol] = joblib.load(file_path)  # Dùng joblib để tải mô hình
     return model_dict
 
 # Download, unzip, and load models
@@ -84,6 +83,7 @@ def setup_models():
 
 # Load all models
 lstm_models, gru_models, cnn_models = setup_models()
+
 
 
 
