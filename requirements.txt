@@ -5,3 +5,4 @@ streamlit
 numpy
 pandas
 beautifulsoup4
+IPython
