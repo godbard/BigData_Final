@@ -1,2 +1,12 @@
 joblib
 plotly
+vnstock
+streamlit
+numpy
+pandas
+os
+datetime
+sys
+gdown
+zipfile
+pickle
