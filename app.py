@@ -21,22 +21,11 @@ stock = Vnstock().stock()
 df_listing = stock.listing.symbols_by_exchange()
 df_listing_enhanced = stock.listing.symbols_by_industries()
 
-# Filter and merge data for selected symbols with left join to retain all rows in df_listing_filtered
+# Filter and merge data for selected symbols
 df_listing_filtered = df_listing[df_listing['symbol'].isin(stock_symbols)]
 df_listing_enhanced_filtered = df_listing_enhanced[df_listing_enhanced['symbol'].isin(stock_symbols)]
-
-# Merge using left join to ensure all rows from df_listing_filtered are retained
-df_merged = pd.merge(
-    df_listing_filtered,
-    df_listing_enhanced_filtered[['symbol', 'icb_name2', 'organ_name']],  # Select necessary columns only
-    on="symbol",
-    how="left"  # Changed to left join
-)
-
-# Assign a numerical index to each row for display
+df_merged = pd.merge(df_listing_filtered, df_listing_enhanced_filtered, on="symbol", how="inner")
 df_merged["index"] = range(1, len(df_merged) + 1)
-
-# Update the stock_info dictionary based on the merged DataFrame
 stock_info = df_merged.set_index("symbol").to_dict(orient="index")
 
 # Directory to store the models
