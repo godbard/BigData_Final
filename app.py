@@ -24,16 +24,21 @@ df_listing_enhanced = stock.listing.symbols_by_industries()
 # Filter and merge data for selected symbols
 df_listing_filtered = df_listing[df_listing['symbol'].isin(stock_symbols)]
 df_listing_enhanced_filtered = df_listing_enhanced[df_listing_enhanced['symbol'].isin(stock_symbols)]
+
+# Perform the merge
 df_merged = pd.merge(df_listing_filtered, df_listing_enhanced_filtered, on="symbol", how="inner")
 
-# Debug: Display merged data to verify 'organ_name' is present
-st.write("Contents of df_merged after merge:", df_merged[['symbol', 'organ_name', 'exchange', 'organ_short_name', 'icb_name2']])
+# Debug: Display the columns in df_merged to verify which columns are present
+st.write("Columns in df_merged after merge:", df_merged.columns.tolist())
 
-df_merged["index"] = range(1, len(df_merged) + 1)
-stock_info = df_merged.set_index("symbol").to_dict(orient="index")
-
-# Debug: Check stock_info dictionary content
-st.write("Contents of stock_info:", stock_info)
+# Check if the expected columns are present before trying to access them
+required_columns = ['symbol', 'organ_name', 'exchange', 'organ_short_name', 'icb_name2']
+missing_columns = [col for col in required_columns if col not in df_merged.columns]
+if missing_columns:
+    st.warning(f"Missing columns in df_merged: {missing_columns}")
+else:
+    # Only display these columns if they are all present
+    st.write("Contents of df_merged after merge:", df_merged[required_columns])
 
 # Directory to store the models
 storage_dir = "Model_storage"
