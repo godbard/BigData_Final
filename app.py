@@ -8,19 +8,13 @@ from vnstock import stock_historical_data
 import gdown
 import zipfile
 import pickle
-from pyspark.sql import SparkSession
-from vnstock3 import Vnstock
 import logging
 
-# Initialize Spark session
-spark = SparkSession.builder.appName("VNStockAnalysis").getOrCreate()
-spark.sparkContext.setLogLevel("ERROR")
-logging.getLogger("vnstock3").setLevel(logging.ERROR)
-
 # Initialize Vnstock API client
+from vnstock3 import Vnstock
 stock = Vnstock().stock()
 
-# Retrieve and filter stock data using Spark
+# Retrieve stock data
 df_listing = stock.listing.symbols_by_exchange()
 df_listing_enhanced = stock.listing.symbols_by_industries()
 
@@ -35,34 +29,12 @@ stock_symbols = [
 df_listing_filtered = df_listing[df_listing['symbol'].isin(stock_symbols)]
 df_listing_enhanced_filtered = df_listing_enhanced[df_listing_enhanced['symbol'].isin(stock_symbols)]
 
-# Join and process data in Spark
-rdd_listing = spark.createDataFrame(df_listing_filtered).rdd.map(
-    lambda row: (row['symbol'], (row['exchange'], row['organ_short_name'], row['organ_name']))
-)
-rdd_listing_enhanced = spark.createDataFrame(df_listing_enhanced_filtered).rdd.map(
-    lambda row: (row['symbol'], (row['icb_name2'],))
-)
-rdd_joined = rdd_listing.join(rdd_listing_enhanced)
-
-rdd_indexed = rdd_joined.map(lambda row: (
-    row[0],
-    row[1][0][0],
-    row[1][0][1],
-    row[1][0][2],
-    row[1][1][0]
-)).zipWithIndex().map(lambda row: (row[1] + 1,) + row[0]).cache()
-
-# Convert Spark DataFrame to Pandas DataFrame for use in Streamlit
-df_indexed = spark.createDataFrame(
-    rdd_indexed,
-    schema=["index", "symbol", "exchange", "organ_short_name", "organ_name", "icb_name2"]
-).toPandas()
-
-# Stop Spark session
-spark.stop()
+# Merge and process data using Pandas
+df_merged = pd.merge(df_listing_filtered, df_listing_enhanced_filtered, on="symbol", how="inner")
+df_merged["index"] = range(1, len(df_merged) + 1)
 
 # Convert DataFrame to dictionary for quick lookup in Streamlit
-stock_info = df_indexed.set_index("symbol").to_dict(orient="index")
+stock_info = df_merged.set_index("symbol").to_dict(orient="index")
 
 # Directory to store the models
 storage_dir = "Model_storage"
@@ -156,37 +128,47 @@ def plot_technical_indicators(stock_symbol):
     fig = sp.make_subplots(rows=3, cols=1, shared_xaxes=True, row_heights=[0.6, 0.2, 0.2], vertical_spacing=0.05, specs=[[{"secondary_y": True}], [{}], [{}]])
 
     fig.add_trace(go.Candlestick(x=df['date_str'], open=df['open'], high=df['high'], low=df['low'], close=df['close'], name='Candlestick'), row=1, col=1)
-    fig.add_trace(go.Bar(x=df['date_str'], y=df['volume'], marker_color='blue', opacity=0.7, name='Volume'), row=1, col=1, secondary_y=True)
+    fig.add_trace(go.Bar(x=df['date_str'], y=df['volume'], opacity=0.7, name='Volume'), row=1, col=1, secondary_y=True)
     fig.add_trace(go.Scatter(x=df['date_str'], y=df['MA50'], mode='lines', name='MA50'), row=1, col=1)
     fig.add_trace(go.Scatter(x=df['date_str'], y=df['MA100'], mode='lines', name='MA100'), row=1, col=1)
     fig.add_trace(go.Scatter(x=df['date_str'], y=df['BB_upper'], line=dict(color='lightgray'), name='BB Upper'), row=1, col=1)
     fig.add_trace(go.Scatter(x=df['date_str'], y=df['BB_lower'], line=dict(color='lightgray'), name='BB Lower'), row=1, col=1)
     fig.add_trace(go.Scatter(x=df['date_str'], y=df['MACD'], mode='lines', name='MACD'), row=2, col=1)
-    fig.add_trace(go.Scatter(x=df['    date_str'], y=df['MACD_Signal'], mode='lines', name='MACD Signal'), row=2, col=1)
+    fig.add_trace(go.Scatter(x=df['date_str'], y=df['MACD_Signal'], mode='lines', name='MACD Signal'), row=2, col=1)
 
     # RSI
     fig.add_trace(go.Scatter(x=df['date_str'], y=df['RSI'], mode='lines', name='RSI'), row=3, col=1)
-    fig.add_shape(type='line', x0=df['date_str'].min(), x1=df['date_str'].max(), y0=70, y1=70,
-                  line=dict(color='red', dash='dash'), row=3, col=1)
-    fig.add_shape(type='line', x0=df['date_str'].min(), x1=df['date_str'].max(), y0=30, y1=30,
-                  line=dict(color='green', dash='dash'), row=3, col=1)
+    fig.add_shape(type='line', x0=df['date_str'].min(), x1=df['date_str'].max(), y0=70, y1=70, line=dict(color='red', dash='dash'), row=3, col=1)
+    fig.add_shape(type='line', x0=df['date_str'].min(), x1=df['date_str'].max(), y0=30, y1=30, line=dict(color='green', dash='dash'), row=3, col=1)
 
-    # Update layout for unified hover and customized axis labels
     fig.update_layout(
         title=f'{stock_symbol} - Technical Indicators and Volume',
         template='plotly_white',
         height=1000,
         hovermode='x unified',
-        xaxis=dict(
-            type='category',
-            tickangle=45,
-            rangeslider=dict(visible=False)
-        ),
+        xaxis=dict(type='category', tickangle=45, rangeslider=dict(visible=False)),
         yaxis=dict(title='Price', side='left'),
         yaxis2=dict(title='Volume', overlaying='y', side='right')
     )
 
     st.plotly_chart(fig)
+
+# Streamlit app setup
+st.title("Stock Price Prediction and Technical Analysis")
+
+# Sidebar for selecting the stock symbol
+stock_symbol = st.sidebar.selectbox("Choose a Stock Symbol", stock_symbols)
+
+# Show technical indicators
+if st.sidebar.button("Show Technical Indicators"):
+    plot_technical_indicators(stock_symbol)
+
+# Show LSTM prediction results only
+if st.sidebar.button("Show Prediction Results"):
+    if stock_symbol in lstm_models:
+        display_prediction_chart(stock_symbol, lstm_models[stock_symbol], "LSTM")
+    else:
+               st.warning(f"No LSTM model available for {stock_symbol}.")
 
 # Function to display stock price prediction
 def display_prediction_chart(stock_symbol, model_data, model_name="LSTM"):
@@ -238,4 +220,56 @@ if st.sidebar.button("Show Prediction Results"):
         display_prediction_chart(stock_symbol, lstm_models[stock_symbol], "LSTM")
     else:
         st.warning(f"No LSTM model available for {stock_symbol}.")
+
+# Function to display stock price prediction
+def display_prediction_chart(stock_symbol, model_data, model_name="LSTM"):
+    # Display stock information
+    display_stock_info(stock_symbol)
+
+    # Extract model data for plotting
+    y_test = model_data.get('y_test', [])
+    y_pred = model_data.get('y_pred', [])
+    dates = model_data.get('dates', [])
+
+    if len(y_test) == 0 or len(y_pred) == 0:
+        st.warning("No prediction data available.")
+        return
+
+    # Create prediction chart
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=dates, y=y_test, mode='lines', name='Actual Price', line=dict(color='blue', width=2)))
+    fig.add_trace(go.Scatter(x=dates, y=y_pred, mode='lines', name=f'Predicted Price ({model_name})', line=dict(color='orange')))
+
+    fig.update_layout(
+        title=f"Stock Price Prediction for {stock_symbol} using {model_name}",
+        xaxis_title='Date',
+        yaxis_title='Price',
+        template='plotly_white'
+    )
+    st.plotly_chart(fig)
+
+    # Show performance metrics
+    st.write(f"### Performance Metrics for {model_name}")
+    st.write(f"RMSE: {model_data.get('rmse', 'N/A'):.2f}")
+    st.write(f"MAE: {model_data.get('mae', 'N/A'):.2f}")
+    st.write(f"R-squared: {model_data.get('r_squared', 'N/A'):.2f}")
+    st.write(f"MAPE: {model_data.get('mape', 'N/A'):.2f}%")
+
+# Streamlit app setup
+st.title("Stock Price Prediction and Technical Analysis")
+
+# Sidebar for selecting the stock symbol
+stock_symbol = st.sidebar.selectbox("Choose a Stock Symbol", stock_symbols)
+
+# Show technical indicators
+if st.sidebar.button("Show Technical Indicators"):
+    plot_technical_indicators(stock_symbol)
+
+# Show LSTM prediction results only
+if st.sidebar.button("Show Prediction Results"):
+    if stock_symbol in lstm_models:
+        display_prediction_chart(stock_symbol, lstm_models[stock_symbol], "LSTM")
+    else:
+        st.warning(f"No LSTM model available for {stock_symbol}.")
+
 
