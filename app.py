@@ -25,8 +25,15 @@ df_listing_enhanced = stock.listing.symbols_by_industries()
 df_listing_filtered = df_listing[df_listing['symbol'].isin(stock_symbols)]
 df_listing_enhanced_filtered = df_listing_enhanced[df_listing_enhanced['symbol'].isin(stock_symbols)]
 df_merged = pd.merge(df_listing_filtered, df_listing_enhanced_filtered, on="symbol", how="inner")
+
+# Debug: Display merged data to verify 'organ_name' is present
+st.write("Contents of df_merged after merge:", df_merged[['symbol', 'organ_name', 'exchange', 'organ_short_name', 'icb_name2']])
+
 df_merged["index"] = range(1, len(df_merged) + 1)
 stock_info = df_merged.set_index("symbol").to_dict(orient="index")
+
+# Debug: Check stock_info dictionary content
+st.write("Contents of stock_info:", stock_info)
 
 # Directory to store the models
 storage_dir = "Model_storage"
@@ -54,7 +61,7 @@ def load_model_data(model_type):
             with open(file_path, 'rb') as file:
                 model_dict[stock_symbol] = pickle.load(file)
 
-    print(f"All {model_type} models have been loaded.")
+    st.write(f"All {model_type} models have been loaded.")
     return model_dict
 
 # Download, unzip, and load LSTM models
@@ -76,6 +83,9 @@ lstm_models = setup_lstm_models()
 # Display stock information
 def display_stock_info(stock_symbol):
     stock_data = stock_info.get(stock_symbol, {})
+    # Debug: Output stock_data for the selected symbol
+    st.write(f"Debug - Stock data for {stock_symbol}:", stock_data)
+    
     st.write(f"**Exchange:** {stock_data.get('exchange', 'N/A')}")
     st.write(f"**Short Name:** {stock_data.get('organ_short_name', 'N/A')}")
     st.write(f"**Full Name:** {stock_data.get('organ_name', 'N/A')}")
@@ -226,3 +236,4 @@ if st.sidebar.button("Show Prediction Results"):
         display_prediction_chart(stock_symbol, lstm_models[stock_symbol], "LSTM")
     else:
         st.warning(f"No LSTM model available for {stock_symbol}.")
+
