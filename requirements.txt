@@ -1,6 +1,6 @@
 joblib
 plotly
-vnstock
+vnstock3
 streamlit
 numpy
 pandas
@@ -9,3 +9,4 @@ IPython
 gdown
 tensorflow>=2.13.0
 keras>=2.13.0
+pyspark
