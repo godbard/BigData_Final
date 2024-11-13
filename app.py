@@ -1,14 +1,11 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import joblib
 import os
 import plotly.graph_objs as go
 import plotly.subplots as sp
 from datetime import datetime, timedelta
 from vnstock import stock_historical_data
-import importlib.util
-import sys
 import gdown
 import zipfile
 from tensorflow.keras.models import load_model
@@ -69,12 +66,148 @@ lstm_models = setup_lstm_models()
 
 # Display technical indicators and predictions
 def plot_technical_indicators(stock_symbol):
-    # [Omitted code for brevity; use original technical indicators code here]
-    pass
+     today = datetime.today()
+    one_year_ago = today - timedelta(days=1461)
+
+
+    # Fetch data from API
+    data = stock_historical_data(
+        stock_symbol,
+        start_date=one_year_ago.strftime('%Y-%m-%d'),
+        end_date=today.strftime('%Y-%m-%d')
+    )
+
+
+    # Check if data is empty
+    if data.empty:
+        st.warning(f"No data available for {stock_symbol}.")
+        return
+
+
+    # Prepare data
+    df = pd.DataFrame(data)[['time', 'open', 'close', 'high', 'low', 'volume']]
+    df = df.rename(columns={'time': 'date'})
+    df['date'] = pd.to_datetime(df['date'])
+    df = df.sort_values(by='date')
+
+
+    # Convert date to string format to use categorical axis
+    df['date_str'] = df['date'].dt.strftime('%Y-%m-%d')
+
+
+    # Calculate technical indicators
+    df['MA50'] = df['close'].rolling(window=50).mean()
+    df['MA100'] = df['close'].rolling(window=100).mean()
+    df['BB_upper'] = df['close'].rolling(window=20).mean() + 2 * df['close'].rolling(window=20).std()
+    df['BB_lower'] = df['close'].rolling(window=20).mean() - 2 * df['close'].rolling(window=20).std()
+    df['MACD'] = df['close'].ewm(span=12).mean() - df['close'].ewm(span=26).mean()
+    df['MACD_Signal'] = df['MACD'].ewm(span=9).mean()
+
+
+    # RSI calculation
+    delta = df['close'].diff()
+    gain = delta.clip(lower=0)
+    loss = -delta.clip(upper=0)
+    avg_gain = gain.rolling(window=14).mean()
+    avg_loss = loss.rolling(window=14).mean()
+    rs = avg_gain / avg_loss
+    df['RSI'] = 100 - (100 / (1 + rs))
+
+
+    # Create subplots
+    fig = sp.make_subplots(
+        rows=3, cols=1, shared_xaxes=True,
+        row_heights=[0.6, 0.2, 0.2], vertical_spacing=0.05,
+        specs=[[{"secondary_y": True}], [{}], [{}]]
+    )
+
+
+    # Candlestick chart
+    fig.add_trace(go.Candlestick(
+        x=df['date_str'], open=df['open'], high=df['high'],
+        low=df['low'], close=df['close'], name='Candlestick'
+    ), row=1, col=1, secondary_y=False)
+
+
+    # Volume bar chart on secondary y-axis (y2)
+    fig.add_trace(go.Bar(
+        x=df['date_str'], y=df['volume'],
+        marker_color='blue', opacity=0.7, name='Volume'
+    ), row=1, col=1, secondary_y=True)
+
+
+    # MA50 and MA100
+    fig.add_trace(go.Scatter(x=df['date_str'], y=df['MA50'], mode='lines', name='MA50'), row=1, col=1)
+    fig.add_trace(go.Scatter(x=df['date_str'], y=df['MA100'], mode='lines', name='MA100'), row=1, col=1)
+
+
+    # Bollinger Bands
+    fig.add_trace(go.Scatter(x=df['date_str'], y=df['BB_upper'], line=dict(color='lightgray'), name='BB Upper'), row=1, col=1)
+    fig.add_trace(go.Scatter(x=df['date_str'], y=df['BB_lower'], line=dict(color='lightgray'), name='BB Lower'), row=1, col=1)
+
+
+    # MACD and Signal line
+    fig.add_trace(go.Scatter(x=df['date_str'], y=df['MACD'], mode='lines', name='MACD'), row=2, col=1)
+    fig.add_trace(go.Scatter(x=df['date_str'], y=df['MACD_Signal'], mode='lines', name='MACD Signal'), row=2, col=1)
+
+
+    # RSI
+    fig.add_trace(go.Scatter(x=df['date_str'], y=df['RSI'], mode='lines', name='RSI'), row=3, col=1)
+    fig.add_shape(type='line', x0=df['date_str'].min(), x1=df['date_str'].max(), y0=70, y1=70,
+                  line=dict(color='red', dash='dash'), row=3, col=1)
+    fig.add_shape(type='line', x0=df['date_str'].min(), x1=df['date_str'].max(), y0=30, y1=30,
+                  line=dict(color='green', dash='dash'), row=3, col=1)
+
+
+    # Update layout to remove range slider, add unified hover, and configure y-axes
+    fig.update_layout(
+        title=f'{stock_symbol} - Technical Indicators and Volume',
+        template='plotly_white',
+        height=1000,
+        hovermode='x unified',
+        xaxis=dict(
+            type='category',
+            tickangle=45,
+            rangeslider=dict(visible=False)
+        ),
+        yaxis=dict(title='Price', side='left'),
+        yaxis2=dict(title='Volume', overlaying='y', side='right')
+    )
+
+
+    st.plotly_chart(fig)
+    
 
 def display_prediction_chart(stock_symbol, model_data, model_name):
-    # [Omitted code for brevity; use original prediction chart code here]
-    pass
+y_test = model_data['y_test']
+    y_pred = model_data['y_pred']
+    dates = model_data['dates']
+
+
+    if len(y_test) == 0 or len(y_pred) == 0:
+        st.warning("No prediction data available.")
+        return
+
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=dates, y=y_test, mode='lines', name='Actual Price', line=dict(color='blue', width=2)))
+    fig.add_trace(go.Scatter(x=dates, y=y_pred, mode='lines', name=f'Predicted Price ({model_name})', line=dict(color='orange')))
+    fig.update_layout(
+        title=f"Stock Price Prediction for {stock_symbol} using {model_name}",
+        xaxis_title='Date',
+        yaxis_title='Price',
+        template='plotly_white'
+    )
+    st.plotly_chart(fig)
+
+
+    # Show performance metrics
+    st.write(f"### Performance Metrics for {model_name}")
+    st.write(f"RMSE: {model_data['rmse']:.2f}")
+    st.write(f"MAE: {model_data['mae']:.2f}")
+    st.write(f"R-squared: {model_data['r_squared']:.2f}")
+    st.write(f"MAPE: {model_data['mape']:.2f}%")
+  
 
 # Streamlit App
 st.title("Stock Price Prediction and Technical Analysis")
