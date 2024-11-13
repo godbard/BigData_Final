@@ -8,7 +8,6 @@ from datetime import datetime, timedelta
 from vnstock import stock_historical_data
 import gdown
 import zipfile
-from tensorflow.keras.models import load_model
 import pickle
 
 # Stock symbols
@@ -36,16 +35,13 @@ def load_model_data(model_type):
     model_dict = {}
 
     for file_name in os.listdir(model_dir):
-        stock_symbol = file_name.split("_")[-1].split(".")[0]
-        file_path = os.path.join(model_dir, file_name)
-        
-        # Load as Keras model (.h5)
-        if file_name.endswith(".h5"):
-            try:
-                model_dict[stock_symbol] = load_model(file_path)
-            except Exception as e:
-                st.warning(f"Failed to load Keras model for {stock_symbol}: {e}")
-                
+        if file_name.endswith(".pkl"):
+            stock_symbol = file_name.split("_")[-1].replace(".pkl", "")
+            file_path = os.path.join(model_dir, file_name)
+            with open(file_path, 'rb') as file:
+                model_dict[stock_symbol] = pickle.load(file)
+
+    print(f"All {model_type} models have been loaded.")
     return model_dict
 
 # Download, unzip, and load LSTM models
@@ -162,7 +158,7 @@ def plot_technical_indicators(stock_symbol):
 
     st.plotly_chart(fig)
     
-def display_prediction_chart(stock_symbol, model_data, model_name):
+def display_prediction_chart(stock_symbol, model_data, model_name="LSTM"):
     y_test = model_data.get('y_test', [])
     y_pred = model_data.get('y_pred', [])
     dates = model_data.get('dates', [])
@@ -204,4 +200,5 @@ if st.sidebar.button("Show Prediction Results"):
     if stock_symbol in lstm_models:
         display_prediction_chart(stock_symbol, lstm_models[stock_symbol], "LSTM")
     else:
-        st.warning(f"No LSTM model available for {stock_symbol}.") 
+        st.warning(f"No LSTM model available for {stock_symbol}.")
+
