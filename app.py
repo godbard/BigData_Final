@@ -9,11 +9,24 @@ from vnstock import stock_historical_data
 import gdown
 import zipfile
 import pickle
+from vnstock3 import Vnstock
 
 # Stock symbols
 stock_symbols = ["VCB", "VNM", "MWG", "VIC", "SSI", "DGC", "CTD", "FPT", "MSN",
                  "GVR", "GAS", "POW", "HPG", "REE", "DHG", "GMD", "VHC", "KBC",
                  "CMG", "VRE"]
+
+# Initialize Vnstock API client and retrieve stock data
+stock = Vnstock().stock()
+df_listing = stock.listing.symbols_by_exchange()
+df_listing_enhanced = stock.listing.symbols_by_industries()
+
+# Filter and merge data for selected symbols
+df_listing_filtered = df_listing[df_listing['symbol'].isin(stock_symbols)]
+df_listing_enhanced_filtered = df_listing_enhanced[df_listing_enhanced['symbol'].isin(stock_symbols)]
+df_merged = pd.merge(df_listing_filtered, df_listing_enhanced_filtered, on="symbol", how="inner")
+df_merged["index"] = range(1, len(df_merged) + 1)
+stock_info = df_merged.set_index("symbol").to_dict(orient="index")
 
 # Directory to store the models
 storage_dir = "Model_storage"
@@ -62,17 +75,11 @@ lstm_models = setup_lstm_models()
 
 # Display stock information
 def display_stock_info(stock_symbol):
-    # Simulate fetching stock information, replace with actual data retrieval as needed
-    stock_info = {
-        "exchange": "HOSE",
-        "organ_short_name": stock_symbol,
-        "organ_name": f"Full Name of {stock_symbol}",
-        "industry": "Finance"
-    }
-    st.write(f"**Exchange:** {stock_info.get('exchange', 'N/A')}")
-    st.write(f"**Short Name:** {stock_info.get('organ_short_name', 'N/A')}")
-    st.write(f"**Full Name:** {stock_info.get('organ_name', 'N/A')}")
-    st.write(f"**Industry:** {stock_info.get('industry', 'N/A')}")
+    stock_data = stock_info.get(stock_symbol, {})
+    st.write(f"**Exchange:** {stock_data.get('exchange', 'N/A')}")
+    st.write(f"**Short Name:** {stock_data.get('organ_short_name', 'N/A')}")
+    st.write(f"**Full Name:** {stock_data.get('organ_name', 'N/A')}")
+    st.write(f"**Industry:** {stock_data.get('icb_name2', 'N/A')}")
 
 # Display technical indicators and predictions
 def plot_technical_indicators(stock_symbol):
