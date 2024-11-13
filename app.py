@@ -21,10 +21,10 @@ stock = Vnstock().stock()
 df_listing = stock.listing.symbols_by_exchange()
 df_listing_enhanced = stock.listing.symbols_by_industries()
 
-# Filter and merge data for selected symbols
+# Filter and merge data for selected symbols, excluding 'organ_name'
 df_listing_filtered = df_listing[df_listing['symbol'].isin(stock_symbols)]
 df_listing_enhanced_filtered = df_listing_enhanced[df_listing_enhanced['symbol'].isin(stock_symbols)]
-df_merged = pd.merge(df_listing_filtered, df_listing_enhanced_filtered, on="symbol", how="inner")
+df_merged = pd.merge(df_listing_filtered, df_listing_enhanced_filtered[['symbol', 'icb_name2']], on="symbol", how="inner")
 df_merged["index"] = range(1, len(df_merged) + 1)
 stock_info = df_merged.set_index("symbol").to_dict(orient="index")
 
@@ -78,7 +78,6 @@ def display_stock_info(stock_symbol):
     stock_data = stock_info.get(stock_symbol, {})
     st.write(f"**Exchange:** {stock_data.get('exchange', 'N/A')}")
     st.write(f"**Short Name:** {stock_data.get('organ_short_name', 'N/A')}")
-    st.write(f"**Full Name:** {stock_data.get('organ_name', 'N/A')}")
     st.write(f"**Industry:** {stock_data.get('icb_name2', 'N/A')}")
 
 # Display technical indicators and predictions
@@ -226,6 +225,3 @@ if st.sidebar.button("Show Prediction Results"):
         display_prediction_chart(stock_symbol, lstm_models[stock_symbol], "LSTM")
     else:
         st.warning(f"No LSTM model available for {stock_symbol}.")
-
-
-
