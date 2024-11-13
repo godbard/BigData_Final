@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 import os
 import plotly.graph_objs as go
 import plotly.subplots as sp
@@ -9,11 +8,61 @@ from vnstock import stock_historical_data
 import gdown
 import zipfile
 import pickle
+from pyspark.sql import SparkSession
+from vnstock3 import Vnstock
+import logging
 
-# Stock symbols
-stock_symbols = ["VCB", "VNM", "MWG", "VIC", "SSI", "DGC", "CTD", "FPT", "MSN",
-                 "GVR", "GAS", "POW", "HPG", "REE", "DHG", "GMD", "VHC", "KBC",
-                 "CMG", "VRE"]
+# Initialize Spark session
+spark = SparkSession.builder.appName("VNStockAnalysis").getOrCreate()
+spark.sparkContext.setLogLevel("ERROR")
+logging.getLogger("vnstock3").setLevel(logging.ERROR)
+
+# Initialize Vnstock API client
+stock = Vnstock().stock()
+
+# Retrieve and filter stock data using Spark
+df_listing = stock.listing.symbols_by_exchange()
+df_listing_enhanced = stock.listing.symbols_by_industries()
+
+# Define stock symbols
+stock_symbols = [
+    "VCB", "VNM", "MWG", "VIC", "SSI", "DGC", "CTD", "FPT", "MSN",
+    "GVR", "GAS", "POW", "HPG", "REE", "DHG", "GMD", "VHC", "KBC",
+    "CMG", "VRE"
+]
+
+# Filter data for selected symbols
+df_listing_filtered = df_listing[df_listing['symbol'].isin(stock_symbols)]
+df_listing_enhanced_filtered = df_listing_enhanced[df_listing_enhanced['symbol'].isin(stock_symbols)]
+
+# Join and process data in Spark
+rdd_listing = spark.createDataFrame(df_listing_filtered).rdd.map(
+    lambda row: (row['symbol'], (row['exchange'], row['organ_short_name'], row['organ_name']))
+)
+rdd_listing_enhanced = spark.createDataFrame(df_listing_enhanced_filtered).rdd.map(
+    lambda row: (row['symbol'], (row['icb_name2'],))
+)
+rdd_joined = rdd_listing.join(rdd_listing_enhanced)
+
+rdd_indexed = rdd_joined.map(lambda row: (
+    row[0],
+    row[1][0][0],
+    row[1][0][1],
+    row[1][0][2],
+    row[1][1][0]
+)).zipWithIndex().map(lambda row: (row[1] + 1,) + row[0]).cache()
+
+# Convert Spark DataFrame to Pandas DataFrame for use in Streamlit
+df_indexed = spark.createDataFrame(
+    rdd_indexed,
+    schema=["index", "symbol", "exchange", "organ_short_name", "organ_name", "icb_name2"]
+).toPandas()
+
+# Stop Spark session
+spark.stop()
+
+# Convert DataFrame to dictionary for quick lookup in Streamlit
+stock_info = df_indexed.set_index("symbol").to_dict(orient="index")
 
 # Directory to store the models
 storage_dir = "Model_storage"
@@ -60,30 +109,31 @@ def setup_lstm_models():
 # Load all LSTM models
 lstm_models = setup_lstm_models()
 
+# Display stock information
+def display_stock_info(stock_symbol):
+    stock_data = stock_info.get(stock_symbol, {})
+    st.write(f"**Exchange:** {stock_data.get('exchange', 'N/A')}")
+    st.write(f"**Short Name:** {stock_data.get('organ_short_name', 'N/A')}")
+    st.write(f"**Full Name:** {stock_data.get('organ_name', 'N/A')}")
+    st.write(f"**Industry:** {stock_data.get('icb_name2', 'N/A')}")
+
 # Display technical indicators and predictions
 def plot_technical_indicators(stock_symbol):
+    display_stock_info(stock_symbol)
+
     today = datetime.today()
     one_year_ago = today - timedelta(days=1461)
 
-    # Fetch data from API
-    data = stock_historical_data(
-        stock_symbol,
-        start_date=one_year_ago.strftime('%Y-%m-%d'),
-        end_date=today.strftime('%Y-%m-%d')
-    )
+    data = stock_historical_data(stock_symbol, start_date=one_year_ago.strftime('%Y-%m-%d'), end_date=today.strftime('%Y-%m-%d'))
 
-    # Check if data is empty
     if data.empty:
         st.warning(f"No data available for {stock_symbol}.")
         return
 
-    # Prepare data
     df = pd.DataFrame(data)[['time', 'open', 'close', 'high', 'low', 'volume']]
     df = df.rename(columns={'time': 'date'})
     df['date'] = pd.to_datetime(df['date'])
     df = df.sort_values(by='date')
-
-    # Convert date to string format to use categorical axis
     df['date_str'] = df['date'].dt.strftime('%Y-%m-%d')
 
     # Calculate technical indicators
@@ -103,36 +153,16 @@ def plot_technical_indicators(stock_symbol):
     rs = avg_gain / avg_loss
     df['RSI'] = 100 - (100 / (1 + rs))
 
-    # Create subplots
-    fig = sp.make_subplots(
-        rows=3, cols=1, shared_xaxes=True,
-        row_heights=[0.6, 0.2, 0.2], vertical_spacing=0.05,
-        specs=[[{"secondary_y": True}], [{}], [{}]]
-    )
+    fig = sp.make_subplots(rows=3, cols=1, shared_xaxes=True, row_heights=[0.6, 0.2, 0.2], vertical_spacing=0.05, specs=[[{"secondary_y": True}], [{}], [{}]])
 
-    # Candlestick chart
-    fig.add_trace(go.Candlestick(
-        x=df['date_str'], open=df['open'], high=df['high'],
-        low=df['low'], close=df['close'], name='Candlestick'
-    ), row=1, col=1, secondary_y=False)
-
-    # Volume bar chart on secondary y-axis (y2)
-    fig.add_trace(go.Bar(
-        x=df['date_str'], y=df['volume'],
-        marker_color='blue', opacity=0.7, name='Volume'
-    ), row=1, col=1, secondary_y=True)
-
-    # MA50 and MA100
+    fig.add_trace(go.Candlestick(x=df['date_str'], open=df['open'], high=df['high'], low=df['low'], close=df['close'], name='Candlestick'), row=1, col=1)
+    fig.add_trace(go.Bar(x=df['date_str'], y=df['volume'], marker_color='blue', opacity=0.7, name='Volume'), row=1, col=1, secondary_y=True)
     fig.add_trace(go.Scatter(x=df['date_str'], y=df['MA50'], mode='lines', name='MA50'), row=1, col=1)
     fig.add_trace(go.Scatter(x=df['date_str'], y=df['MA100'], mode='lines', name='MA100'), row=1, col=1)
-
-    # Bollinger Bands
     fig.add_trace(go.Scatter(x=df['date_str'], y=df['BB_upper'], line=dict(color='lightgray'), name='BB Upper'), row=1, col=1)
     fig.add_trace(go.Scatter(x=df['date_str'], y=df['BB_lower'], line=dict(color='lightgray'), name='BB Lower'), row=1, col=1)
-
-    # MACD and Signal line
     fig.add_trace(go.Scatter(x=df['date_str'], y=df['MACD'], mode='lines', name='MACD'), row=2, col=1)
-    fig.add_trace(go.Scatter(x=df['date_str'], y=df['MACD_Signal'], mode='lines', name='MACD Signal'), row=2, col=1)
+    fig.add_trace(go.Scatter(x=df['    date_str'], y=df['MACD_Signal'], mode='lines', name='MACD Signal'), row=2, col=1)
 
     # RSI
     fig.add_trace(go.Scatter(x=df['date_str'], y=df['RSI'], mode='lines', name='RSI'), row=3, col=1)
@@ -141,7 +171,7 @@ def plot_technical_indicators(stock_symbol):
     fig.add_shape(type='line', x0=df['date_str'].min(), x1=df['date_str'].max(), y0=30, y1=30,
                   line=dict(color='green', dash='dash'), row=3, col=1)
 
-    # Update layout to remove range slider, add unified hover, and configure y-axes
+    # Update layout for unified hover and customized axis labels
     fig.update_layout(
         title=f'{stock_symbol} - Technical Indicators and Volume',
         template='plotly_white',
@@ -157,8 +187,13 @@ def plot_technical_indicators(stock_symbol):
     )
 
     st.plotly_chart(fig)
-    
+
+# Function to display stock price prediction
 def display_prediction_chart(stock_symbol, model_data, model_name="LSTM"):
+    # Display stock information
+    display_stock_info(stock_symbol)
+
+    # Extract model data for plotting
     y_test = model_data.get('y_test', [])
     y_pred = model_data.get('y_pred', [])
     dates = model_data.get('dates', [])
@@ -167,9 +202,11 @@ def display_prediction_chart(stock_symbol, model_data, model_name="LSTM"):
         st.warning("No prediction data available.")
         return
 
+    # Create prediction chart
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=dates, y=y_test, mode='lines', name='Actual Price', line=dict(color='blue', width=2)))
     fig.add_trace(go.Scatter(x=dates, y=y_pred, mode='lines', name=f'Predicted Price ({model_name})', line=dict(color='orange')))
+
     fig.update_layout(
         title=f"Stock Price Prediction for {stock_symbol} using {model_name}",
         xaxis_title='Date',
@@ -185,7 +222,7 @@ def display_prediction_chart(stock_symbol, model_data, model_name="LSTM"):
     st.write(f"R-squared: {model_data.get('r_squared', 'N/A'):.2f}")
     st.write(f"MAPE: {model_data.get('mape', 'N/A'):.2f}%")
 
-# Streamlit App
+# Streamlit app setup
 st.title("Stock Price Prediction and Technical Analysis")
 
 # Sidebar for selecting the stock symbol
