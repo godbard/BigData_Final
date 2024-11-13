@@ -78,7 +78,6 @@ def display_stock_info(stock_symbol):
     stock_data = stock_info.get(stock_symbol, {})
     st.write(f"**Exchange:** {stock_data.get('exchange', 'N/A')}")
     st.write(f"**Short Name:** {stock_data.get('organ_short_name', 'N/A')}")
-    st.write(f"**Full Name:** {stock_data.get('organ_name', 'N/A')}")
     st.write(f"**Industry:** {stock_data.get('icb_name2', 'N/A')}")
 
 # Display technical indicators and predictions
