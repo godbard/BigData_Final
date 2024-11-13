@@ -66,9 +66,8 @@ lstm_models = setup_lstm_models()
 
 # Display technical indicators and predictions
 def plot_technical_indicators(stock_symbol):
-     today = datetime.today()
+    today = datetime.today()
     one_year_ago = today - timedelta(days=1461)
-
 
     # Fetch data from API
     data = stock_historical_data(
@@ -77,12 +76,10 @@ def plot_technical_indicators(stock_symbol):
         end_date=today.strftime('%Y-%m-%d')
     )
 
-
     # Check if data is empty
     if data.empty:
         st.warning(f"No data available for {stock_symbol}.")
         return
-
 
     # Prepare data
     df = pd.DataFrame(data)[['time', 'open', 'close', 'high', 'low', 'volume']]
@@ -90,10 +87,8 @@ def plot_technical_indicators(stock_symbol):
     df['date'] = pd.to_datetime(df['date'])
     df = df.sort_values(by='date')
 
-
     # Convert date to string format to use categorical axis
     df['date_str'] = df['date'].dt.strftime('%Y-%m-%d')
-
 
     # Calculate technical indicators
     df['MA50'] = df['close'].rolling(window=50).mean()
@@ -102,7 +97,6 @@ def plot_technical_indicators(stock_symbol):
     df['BB_lower'] = df['close'].rolling(window=20).mean() - 2 * df['close'].rolling(window=20).std()
     df['MACD'] = df['close'].ewm(span=12).mean() - df['close'].ewm(span=26).mean()
     df['MACD_Signal'] = df['MACD'].ewm(span=9).mean()
-
 
     # RSI calculation
     delta = df['close'].diff()
@@ -113,7 +107,6 @@ def plot_technical_indicators(stock_symbol):
     rs = avg_gain / avg_loss
     df['RSI'] = 100 - (100 / (1 + rs))
 
-
     # Create subplots
     fig = sp.make_subplots(
         rows=3, cols=1, shared_xaxes=True,
@@ -121,13 +114,11 @@ def plot_technical_indicators(stock_symbol):
         specs=[[{"secondary_y": True}], [{}], [{}]]
     )
 
-
     # Candlestick chart
     fig.add_trace(go.Candlestick(
         x=df['date_str'], open=df['open'], high=df['high'],
         low=df['low'], close=df['close'], name='Candlestick'
     ), row=1, col=1, secondary_y=False)
-
 
     # Volume bar chart on secondary y-axis (y2)
     fig.add_trace(go.Bar(
@@ -135,21 +126,17 @@ def plot_technical_indicators(stock_symbol):
         marker_color='blue', opacity=0.7, name='Volume'
     ), row=1, col=1, secondary_y=True)
 
-
     # MA50 and MA100
     fig.add_trace(go.Scatter(x=df['date_str'], y=df['MA50'], mode='lines', name='MA50'), row=1, col=1)
     fig.add_trace(go.Scatter(x=df['date_str'], y=df['MA100'], mode='lines', name='MA100'), row=1, col=1)
-
 
     # Bollinger Bands
     fig.add_trace(go.Scatter(x=df['date_str'], y=df['BB_upper'], line=dict(color='lightgray'), name='BB Upper'), row=1, col=1)
     fig.add_trace(go.Scatter(x=df['date_str'], y=df['BB_lower'], line=dict(color='lightgray'), name='BB Lower'), row=1, col=1)
 
-
     # MACD and Signal line
     fig.add_trace(go.Scatter(x=df['date_str'], y=df['MACD'], mode='lines', name='MACD'), row=2, col=1)
     fig.add_trace(go.Scatter(x=df['date_str'], y=df['MACD_Signal'], mode='lines', name='MACD Signal'), row=2, col=1)
-
 
     # RSI
     fig.add_trace(go.Scatter(x=df['date_str'], y=df['RSI'], mode='lines', name='RSI'), row=3, col=1)
@@ -157,7 +144,6 @@ def plot_technical_indicators(stock_symbol):
                   line=dict(color='red', dash='dash'), row=3, col=1)
     fig.add_shape(type='line', x0=df['date_str'].min(), x1=df['date_str'].max(), y0=30, y1=30,
                   line=dict(color='green', dash='dash'), row=3, col=1)
-
 
     # Update layout to remove range slider, add unified hover, and configure y-axes
     fig.update_layout(
@@ -174,20 +160,16 @@ def plot_technical_indicators(stock_symbol):
         yaxis2=dict(title='Volume', overlaying='y', side='right')
     )
 
-
     st.plotly_chart(fig)
     
-
 def display_prediction_chart(stock_symbol, model_data, model_name):
-y_test = model_data['y_test']
+    y_test = model_data['y_test']
     y_pred = model_data['y_pred']
     dates = model_data['dates']
-
 
     if len(y_test) == 0 or len(y_pred) == 0:
         st.warning("No prediction data available.")
         return
-
 
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=dates, y=y_test, mode='lines', name='Actual Price', line=dict(color='blue', width=2)))
@@ -200,14 +182,12 @@ y_test = model_data['y_test']
     )
     st.plotly_chart(fig)
 
-
     # Show performance metrics
     st.write(f"### Performance Metrics for {model_name}")
     st.write(f"RMSE: {model_data['rmse']:.2f}")
     st.write(f"MAE: {model_data['mae']:.2f}")
     st.write(f"R-squared: {model_data['r_squared']:.2f}")
     st.write(f"MAPE: {model_data['mape']:.2f}%")
-  
 
 # Streamlit App
 st.title("Stock Price Prediction and Technical Analysis")
@@ -223,3 +203,6 @@ if st.sidebar.button("Show Technical Indicators"):
 if st.sidebar.button("Show Prediction Results"):
     if stock_symbol in lstm_models:
         display_prediction_chart(stock_symbol, lstm_models[stock_symbol], "LSTM")
+    else:
+        st.warning(f"No LSTM model available for {stock_symbol}.")
+
