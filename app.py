@@ -163,9 +163,9 @@ def plot_technical_indicators(stock_symbol):
     st.plotly_chart(fig)
     
 def display_prediction_chart(stock_symbol, model_data, model_name):
-    y_test = model_data['y_test']
-    y_pred = model_data['y_pred']
-    dates = model_data['dates']
+    y_test = model_data.get('y_test', [])
+    y_pred = model_data.get('y_pred', [])
+    dates = model_data.get('dates', [])
 
     if len(y_test) == 0 or len(y_pred) == 0:
         st.warning("No prediction data available.")
@@ -184,10 +184,10 @@ def display_prediction_chart(stock_symbol, model_data, model_name):
 
     # Show performance metrics
     st.write(f"### Performance Metrics for {model_name}")
-    st.write(f"RMSE: {model_data['rmse']:.2f}")
-    st.write(f"MAE: {model_data['mae']:.2f}")
-    st.write(f"R-squared: {model_data['r_squared']:.2f}")
-    st.write(f"MAPE: {model_data['mape']:.2f}%")
+    st.write(f"RMSE: {model_data.get('rmse', 'N/A'):.2f}")
+    st.write(f"MAE: {model_data.get('mae', 'N/A'):.2f}")
+    st.write(f"R-squared: {model_data.get('r_squared', 'N/A'):.2f}")
+    st.write(f"MAPE: {model_data.get('mape', 'N/A'):.2f}%")
 
 # Streamlit App
 st.title("Stock Price Prediction and Technical Analysis")
@@ -204,5 +204,4 @@ if st.sidebar.button("Show Prediction Results"):
     if stock_symbol in lstm_models:
         display_prediction_chart(stock_symbol, lstm_models[stock_symbol], "LSTM")
     else:
-        st.warning(f"No LSTM model available for {stock_symbol}.")
-
+        st.warning(f"No LSTM model available for {stock_symbol}.") 
