@@ -21,24 +21,23 @@ stock = Vnstock().stock()
 df_listing = stock.listing.symbols_by_exchange()
 df_listing_enhanced = stock.listing.symbols_by_industries()
 
-# Filter and merge data for selected symbols
+# Filter and merge data for selected symbols with left join to retain all rows in df_listing_filtered
 df_listing_filtered = df_listing[df_listing['symbol'].isin(stock_symbols)]
 df_listing_enhanced_filtered = df_listing_enhanced[df_listing_enhanced['symbol'].isin(stock_symbols)]
 
-# Perform the merge
-df_merged = pd.merge(df_listing_filtered, df_listing_enhanced_filtered, on="symbol", how="inner")
+# Merge using left join to ensure all rows from df_listing_filtered are retained
+df_merged = pd.merge(
+    df_listing_filtered,
+    df_listing_enhanced_filtered[['symbol', 'icb_name2', 'organ_name']],  # Select necessary columns only
+    on="symbol",
+    how="left"  # Changed to left join
+)
 
-# Debug: Display the columns in df_merged to verify which columns are present
-st.write("Columns in df_merged after merge:", df_merged.columns.tolist())
+# Assign a numerical index to each row for display
+df_merged["index"] = range(1, len(df_merged) + 1)
 
-# Check if the expected columns are present before trying to access them
-required_columns = ['symbol', 'organ_name', 'exchange', 'organ_short_name', 'icb_name2']
-missing_columns = [col for col in required_columns if col not in df_merged.columns]
-if missing_columns:
-    st.warning(f"Missing columns in df_merged: {missing_columns}")
-else:
-    # Only display these columns if they are all present
-    st.write("Contents of df_merged after merge:", df_merged[required_columns])
+# Update the stock_info dictionary based on the merged DataFrame
+stock_info = df_merged.set_index("symbol").to_dict(orient="index")
 
 # Directory to store the models
 storage_dir = "Model_storage"
@@ -66,7 +65,7 @@ def load_model_data(model_type):
             with open(file_path, 'rb') as file:
                 model_dict[stock_symbol] = pickle.load(file)
 
-    st.write(f"All {model_type} models have been loaded.")
+    print(f"All {model_type} models have been loaded.")
     return model_dict
 
 # Download, unzip, and load LSTM models
@@ -88,9 +87,6 @@ lstm_models = setup_lstm_models()
 # Display stock information
 def display_stock_info(stock_symbol):
     stock_data = stock_info.get(stock_symbol, {})
-    # Debug: Output stock_data for the selected symbol
-    st.write(f"Debug - Stock data for {stock_symbol}:", stock_data)
-    
     st.write(f"**Exchange:** {stock_data.get('exchange', 'N/A')}")
     st.write(f"**Short Name:** {stock_data.get('organ_short_name', 'N/A')}")
     st.write(f"**Full Name:** {stock_data.get('organ_name', 'N/A')}")
@@ -241,4 +237,6 @@ if st.sidebar.button("Show Prediction Results"):
         display_prediction_chart(stock_symbol, lstm_models[stock_symbol], "LSTM")
     else:
         st.warning(f"No LSTM model available for {stock_symbol}.")
+
+
 
