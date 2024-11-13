@@ -20,7 +20,7 @@ stock_symbols = ["VCB", "VNM", "MWG", "VIC", "SSI", "DGC", "CTD", "FPT", "MSN",
                  "CMG", "VRE"]
 
 # Directory to store the models
-storage_dir = "Model_Storage"
+storage_dir = "Model_storage"
 os.makedirs(storage_dir, exist_ok=True)
 
 # Function to download files
@@ -72,7 +72,7 @@ def setup_models():
         return True
 
     # LSTM models
-    lstm_file_id = '10O8z6Y8B2sHvv5AA0aRzeVJm1aQU0VBG'
+    lstm_file_id = '10eo2UHTAsrYAYkK_ol4jGTfAm_ksv3Vx'
     lstm_zip_path = os.path.join(storage_dir, 'LSTM_models.zip')
     if download_and_unzip(lstm_file_id, lstm_zip_path, os.path.join(storage_dir, 'LSTM')):
         lstm_models = load_model_data("LSTM")
